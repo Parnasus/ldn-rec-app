@@ -164,7 +164,6 @@ class BoroughRecommender(object):
         df_data = self.df_rent.loc[
             self.df_rent["Category"] == "All categories", ["Borough", "Median"]
         ]
-        print(df_data.columns)
 
         # Chloropleth Map of boundaries, where shading is dependent on median rent for 'All categories'
         folium.Choropleth(
@@ -187,6 +186,8 @@ class BoroughRecommender(object):
         """
         Creates map object using folium
         """
+        self.__initialize_map()  # to remove previous plots
+
         df_matched = self.df_venues[
             (self.df_venues["Borough"].isin(self.recommended_boroughs))
             & (self.df_venues["Group"].isin(self.selected_groups))
