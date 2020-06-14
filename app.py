@@ -10,6 +10,14 @@ class BoroughRecommender(object):
     VENUES_PICKLE = "app_ldn_venues_raw.pkl"
     GROUPS_PICKLE = "app_ldn_groups_norm.pkl"
     LDN_GEOJSON = "london_boroughs_proper.geojson"
+    ACM_TYPES = [
+        'Room',
+        'Studio',
+        'One Bedroom',
+        'Two Bedroom',
+        'Three Bedroom',
+        'Four Bedroom',
+    ]
 
     def __init__(
         self,
