@@ -180,11 +180,12 @@ base_layout = html.Div(
                             ],
                         ),
                         html.Div(
-                            className='container my-3 p-3',
+                            className='container my-3 p-3 border',
                             children=[
                                 html.P( 
-                                    'Looking for [Accommodation Types] within [rent_min] to [rent_max] per month, preferring: [Venue Types].',
+                                    #'Looking for [Accommodation Types] within [rent_min] to [rent_max] per month, preferring: [Venue Types].',
                                     id='params-summary',
+                                    style={'whiteSpace': 'pre-wrap'},
                                     ),
                                 html.Div(
                                     className="row",
@@ -194,18 +195,27 @@ base_layout = html.Div(
                                             id="btn-recommend",
                                             color="primary",
                                             className="mr-1",
-                                            style={"margin-top": "20px"},
+                                            style={"margin": "10px"},
                                         )
                                     ],
                                 ),
                             ]
                         ),
                         html.Div(
-                            className="container p-3",
+                            className="container p-3 border",
+                            hidden=True,
+                            id='section-results',
                             children=[
+                                html.H3("Results"),
                                 html.Div(
                                     className="row",
                                     children=[
+                                        html.Div(
+                                            id="results",
+                                            className="col-4",
+                                            children=[
+                                            ],
+                                        ),
                                         html.Div(
                                             id="results-map",
                                             className="col-8",
