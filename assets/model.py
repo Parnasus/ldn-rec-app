@@ -1,6 +1,8 @@
 import pandas as pd
 import numpy as np
 import folium
+import json
+import copy
 
 
 class BoroughRecommender(object):
@@ -11,12 +13,12 @@ class BoroughRecommender(object):
     GROUPS_PICKLE = "ldn_groups_norm.pkl"
     LDN_GEOJSON = "london_boroughs_proper.geojson"
     ACM_TYPES = [
-        'Room',
-        'Studio',
-        'One Bedroom',
-        'Two Bedroom',
-        'Three Bedroom',
-        'Four Bedroom',
+        "Room",
+        "Studio",
+        "One Bedroom",
+        "Two Bedroom",
+        "Three Bedroom",
+        "Four Bedroom",
     ]
 
     def __init__(
@@ -44,6 +46,7 @@ class BoroughRecommender(object):
         self.auto_update = auto_update
         self.selected_groups = self.venue_groups
         self.selected_boroughs = None
+        self.recommended_boroughs = None
         self.accommodation_types = "All categories"
         self.rent_range = [0, 3200]
         self.map = None
@@ -106,13 +109,6 @@ class BoroughRecommender(object):
         if rent_lower > rent_higher:
             rent_higher = rent_lower
 
-        rent_cond_1 = (df["Lower quartile"] <= rent_higher) & (
-            df["Upper quartile"] >= rent_higher
-        )
-        rent_cond_2 = (df["Lower quartile"] <= rent_lower) & (
-            df["Upper quartile"] >= rent_lower
-        )
-        rent_cond = rent_cond_1 | rent_cond_2
         rent_cond = (df["Lower quartile"] <= rent_higher) & (
             df["Upper quartile"] >= rent_lower
         )
@@ -236,6 +232,7 @@ class BoroughRecommender(object):
         if self.plot_venues:
             self._plot_borough_venues(df_matched)
 
+
     def _plot_borough_venues(self, df_matched, n=10):
         """
         Plots venues on the map
@@ -253,7 +250,7 @@ class BoroughRecommender(object):
         }
 
         self.venue_legend = color_map
-
+        plotted_groups = []
         for i, row in df_matched.iterrows():
             # let's plot only every n-th point
             if i % n == 0:
@@ -262,8 +259,9 @@ class BoroughRecommender(object):
             lon_i = row["Venue Longitude"]
             venue = row["Venue"]
             group = row["Group"]
-
-            label = f"{venue}" # ({group})"
+            if group not in plotted_groups:
+                plotted_groups.append(group)
+            label = f"{venue}"  # ({group})"
 
             coords = [lat_i, lon_i]
             folium.CircleMarker(
@@ -277,3 +275,64 @@ class BoroughRecommender(object):
                 fill_opacity=0.9,
                 parse_html=False,
             ).add_to(self.map)
+        # border-radius: 50%; overflow: hidden; border: 1px solid #000000
+        # Draw legend
+        # <i class="fa fa-circle" style="color:{color};border-radius: 100%; border: 3px solid rgba(0, 0, 0, .85)"></i>
+        item_txt = """<br> &nbsp; {item} &nbsp; <div class="circle" style="width: 10px; height: 10px;  background: {color};
+                        border-radius: 50%; border: 1px solid black; display:inline-block;"></div>"""
+        # html_itms = item_txt.format( item= "mark_1" , col= "red")
+        html_items = []
+        for grp in plotted_groups:
+            color = color_map[grp]
+            html_item = item_txt.format(item=grp, color=color)
+            html_items.append(html_item)
+        html_items_str = "".join(html_items)
+
+        legend_html = """
+            <div style="
+            position: fixed; 
+            bottom: 20px; left: 20px; width: 200px; height: 160px; 
+            border:1px solid grey; z-index:9999; 
+
+            background-color:white;
+            opacity: .85;
+
+            font-size:12px;
+            font-weight: bold;
+
+            ">
+            &nbsp; {title}
+            
+
+            {itm_txt}
+
+            </div>
+             """.format(
+            title="Venue Types:", itm_txt=html_items_str
+        )
+
+        self.map.get_root().html.add_child(folium.Element(legend_html))
+
+    def highlight_borough_on_map(self, name=""):
+        if name:
+            self._plot_boroughs()
+            with open(self.ldn_geojson) as handle:
+                borough_geo = json.loads(handle.read())
+
+            for feature in borough_geo["features"]:
+                if feature["properties"]["name"] == name:
+                    borough = feature
+                    break
+
+            folium.GeoJson(borough, name=name,
+            style_function=lambda x: {
+                'color': 'blue',
+                'weight': 4,
+                "opacity": 1,
+                'fillOpacity': 0,
+                'interactive':False,
+                },
+            ).add_to(self.map)
+        else:
+            self._plot_boroughs()
+

@@ -2,8 +2,6 @@ from dash.dependencies import Input, Output, State
 from app import app
 import folium
 
-# import plotly.graph_objs as go
-# from plotly import tools
 from dash.exceptions import PreventUpdate
 
 import numpy as np
@@ -11,121 +9,56 @@ import pandas as pd
 import dash_core_components as dcc
 import dash_html_components as html
 import dash_table as dt
+import dash
 from dash_table.Format import Format, Scheme, Sign, Symbol
 from assets.model import BoroughRecommender
 
-# N_INPUTS = 5
-
-# brec = BoroughRecommender(
-#     data_dir="data\\", num_of_recs=N_INPUTS, auto_update=True, plot_venues=True
-# )
-temp_brec = BoroughRecommender(
-            data_dir="data\\",
-            num_of_recs=5,
-            auto_update=True,
-            plot_venues=False,
-        )
-
-def data_bars(df, column, min_val=None, max_val=None):
-    n_bins = 100
-    bounds = [i * (1.0 / n_bins) for i in range(n_bins + 1)]
-    if max_val:
-        max_v = max_val
-    else:
-        max_v = df[column].max()
-
-    if min_val:
-        min_v = min_val
-    else:
-        min_v = df[column].min()
-
-    ranges = [((max_v - min_v) * i) + df[column].min() for i in bounds]
-    styles = []
-    for i in range(1, len(bounds)):
-        min_bound = ranges[i - 1]
-        max_bound = ranges[i]
-
-        max_bound_percentage = bounds[i] * 100
-        print(max_bound_percentage)
-        styles.append(
-            {
-                "if": {
-                    "filter_query": (
-                        "{{{column}}} >= {min_bound}"
-                        + (
-                            " && {{{column}}} < {max_bound}"
-                            if (i < len(bounds) - 1)
-                            else ""
-                        )
-                    ).format(column=column, min_bound=min_bound, max_bound=max_bound),
-                    "column_id": column,
-                },
-                "background": (
-                    """
-                    linear-gradient(90deg,
-                    #0074D9 0%,
-                    #0074D9 {max_bound_percentage}%,
-                    white {max_bound_percentage}%,
-                    white 100%)
-                """.format(
-                        max_bound_percentage=max_bound_percentage
-                    )
-                ),
-                "paddingBottom": 2,
-                "paddingTop": 2,
-            }
-        )
-
-    return styles
-
-
-@app.callback(
-    Output("dpn-venue-types", "options"), [Input("btn-recommend", "n_clicks")]
+brec = BoroughRecommender(
+    data_dir="data\\", num_of_recs=5, auto_update=True, plot_venues=False
 )
-def set_categories(n_clicks):
-    if n_clicks is None:
-        cats = temp_brec.venue_groups
-        opts = [{"label": c, "value": c} for c in cats]
-        return opts
-    else:
-        raise PreventUpdate
-
 
 @app.callback(
-    [Output("results", "children"), Output("results-map", "children"),
-    Output("section-results", "hidden")],
-    [Input("btn-recommend", "n_clicks")],
+    [
+        Output("results", "children"),
+        Output("results-map", "children"),
+        Output("section-results", "hidden"),
+        Output("results-rent", "children"),
+        Output("results-venues", "children"),
+        Output("footer", "hidden"),
+    ],
+    [
+        Input("btn-recommend", "n_clicks"),
+        Input('dt-results', 'active_cell'),
+    ],
     [
         State("chk-acm-types", "value"),
         State("slider-rent", "value"),
         State("dpn-venue-types", "value"),
         State("dpn-number-of-recs", "value"),
         State("chk-display-venues", "value"),
+        State('dt-results', 'data'),
     ],
     prevent_initial_call=True,
 )
-def run_recommender(rec_click, acm_types, rent_range, venue_rank, n_recs, plot_venues):
-    if rec_click:
-        # rent_range = [400, 800]
-        # acm_type = ['Studio', 'One Bedroom']
-        # group_rank = [
-        #     'Green spaces',
-        #     'Groceries',
-        #     'Public Transport',
-        #     'Shopping',
-        # ]
+def run_recommender(rec_click, active_cell, acm_types, rent_range, venue_rank, n_recs, plot_venues, dt_data):
+    
+    ctx = dash.callback_context
+    
+    if not ctx.triggered:
+        raise PreventUpdate
+    else:
+        trigger_id = ctx.triggered[0]['prop_id'].split('.')[0]
+
+    if trigger_id == 'btn-recommend':
+        if not rec_click:
+            raise PreventUpdate
         if not plot_venues:
             plot_venues = False
         else:
             plot_venues = True
 
-        brec = BoroughRecommender(
-            data_dir="data\\",
-            num_of_recs=n_recs,
-            auto_update=True,
-            plot_venues=plot_venues,
-        )
-
+        brec.plot_venues = plot_venues
+        brec.num_of_recs = n_recs 
         brec.set_rent_range(rent_range)
         brec.set_accommodation_types(acm_types)
         brec.set_preferences(venue_rank)
@@ -151,10 +84,12 @@ def run_recommender(rec_click, acm_types, rent_range, venue_rank, n_recs, plot_v
         rec_data = df_rec_n.to_dict(orient="records")
 
         # Create Data table
-
-        # columns=[{"name": i, "id": i} for i in df.columns],
         rec_table_cols = [
-            {"name": "Borough", "id": "borough", "type": "text"},
+            {
+                "name": "Borough",
+                "id": "borough",
+                "type": "text",
+            },
             {
                 "name": "Match Score",
                 "id": "match",
@@ -172,35 +107,233 @@ def run_recommender(rec_click, acm_types, rent_range, venue_rank, n_recs, plot_v
             data=rec_data,
             columns=rec_table_cols,
             style_cell_conditional=rec_style_cell_conditional,
-            #style_data_conditional=data_bars(df_rec_n, "match", min_val=10),
+            style_header={
+                'backgroundColor': 'rgb(230, 230, 230)',
+                'fontWeight': 'bold',
+                'textAlign': 'left',
+            },
+            style_data_conditional=[
+                {
+                    'if': {'row_index': 'odd'},
+                    'backgroundColor': 'rgb(248, 248, 248)'
+                }
+            ],
         )
 
-        #print(brec.df_rent)
-
-        return [rec_table, out_map, False]
+        available_boroughs = brec.recommended_boroughs
+        
+        borough_opts = []
+        for b in available_boroughs:
+            borough_opts.append(
+                {'label': b, 'value': b}
+            )
+        
+        return [rec_table, out_map, False, None, None, False]
     else:
-        raise PreventUpdate
+        row_idx = active_cell['row']
+        column_id = active_cell['column_id']
+        if column_id == 'borough':
+            selected_borough = dt_data[row_idx]['borough']
+            brec.highlight_borough_on_map(name=selected_borough)
+            brec.save_map("map.html")
+
+            out_map = html.Iframe(
+                srcDoc=open("map.html", "r", encoding="utf8").read(),
+                width="100%",
+                height=600,
+            )
+
+            df_rent =  brec.df_rent
+            accom = brec.accommodation_types
+
+            select_cond = (df_rent['Borough']==selected_borough) & (df_rent['Category'].isin(accom))
+            df_rent = df_rent.loc[select_cond]
+            rent_cols = df_rent.columns
+            keep_cols = rent_cols[1:]
+            df_rent = df_rent[keep_cols]
+
+            rent_data = df_rent.to_dict(orient='records')
+            rent_columns = [{"name": i, "id": i} for i in df_rent.columns]
+            
+            for i in range(1,4):
+                rent_columns[i]['type'] = "numeric"
+                rent_columns[i]['format'] = Format(group=',')
+                rent_columns[i]['name'] += ' (£)'
+
+            dt_rent = dt.DataTable(
+                id="dt-rents",
+                data=rent_data,
+                columns=rent_columns,
+                style_data_conditional=[
+                    {
+                        'if': {'row_index': 'odd'},
+                        'backgroundColor': 'rgb(248, 248, 248)'
+                    }
+                ],
+                style_header={
+                    'backgroundColor': 'rgb(230, 230, 230)',
+                    'fontWeight': 'bold',
+                    'textAlign': 'left',
+                },
+                style_cell_conditional=[
+                    {'if': {'column_id': 'Category'},
+                    'minWidth': '180px', 'width': '180px', 'maxWidth': '180px', 'textAlign': 'left'},
+                    {'if': {'column_id': 'Lower quartile'},
+                    'minWidth': '90px', 'width': '90px', 'maxWidth': '90px', 'textAlign': 'right'},
+                    {'if': {'column_id': 'Median'},
+                    'minWidth': '90px', 'width': '90px', 'maxWidth': '90px', 'textAlign': 'right'},
+                    {'if': {'column_id': 'Upper quartile'},
+                    'minWidth': '90px', 'width': '90px', 'maxWidth': '90px', 'textAlign': 'right'},
+                ]
+            )
+
+            venue_groups = brec.selected_groups
+
+            df_venues = brec.df_venues
+            select_cond = (df_venues['Borough']==selected_borough) & (df_venues['Group'].isin(venue_groups))
+            df_venues = df_venues.loc[select_cond]
+
+            # venue sorting
+            sort_ord = {}
+            for i, v in enumerate(venue_groups):
+                sort_ord[v] = i
+
+            df_venues.loc[:, 'sort'] = df_venues['Group'].map(sort_ord)
+            df_venues.sort_values(by='sort', inplace=True)
+            del df_venues['sort']
+            
+            url_gm = "https://www.google.com/maps/search/?api=1&query=" #<lat>,<lng>
+            url_gm = "https://www.google.com/maps/search/?api=1&query={0},{1}"
+            df_venues.loc[:, 'gmaps_url'] = df_venues.apply(lambda x: url_gm.format(x['Venue Latitude'], x['Venue Longitude']), axis=1)
+            col_format = "[Link to Maps]({0})"
+            df_venues.loc[:, 'URL'] = df_venues['gmaps_url'].apply(lambda x: col_format.format(x))
+            
+    
+            col_order =  ['Venue', 'Group', 'Venue Category', 'URL']
+            df_venues = df_venues[col_order]
+
+            venue_data = df_venues.to_dict(orient='records')
+            venue_columns = [{"name": i, "id": i} for i in df_venues.columns]
+            venue_columns[-1] = {"name": "URL", "id": "URL", "type": 'text', "presentation": "markdown"}
+            available_boroughs = brec.recommended_boroughs
+
+            dt_venues = dt.DataTable(
+                id="dt-venues",
+                data=venue_data,
+                columns=venue_columns,
+                page_current=0,
+                page_size=20,
+                filter_action='native',
+                style_data_conditional=[
+                    {
+                        'if': {'row_index': 'odd'},
+                        'backgroundColor': 'rgb(248, 248, 248)'
+                    }
+                ],
+                style_header={
+                    'backgroundColor': 'rgb(230, 230, 230)',
+                    'fontWeight': 'bold',
+                    'textAlign': 'left',
+                },
+                style_cell_conditional=[
+                    {'if': {'column_id': 'Venue'},
+                    'minWidth': '180px', 'width': '180px', 'maxWidth': '180px', 'textAlign': 'left'},
+                    {'if': {'column_id': 'Group'},
+                    'minWidth': '90px', 'width': '90px', 'maxWidth': '90px', 'textAlign': 'left'},
+                    {'if': {'column_id': 'Venue Category'},
+                    'minWidth': '90px', 'width': '90px', 'maxWidth': '90px', 'textAlign': 'left'},
+                    {'if': {'column_id': 'URL'},
+                    'minWidth': '90px', 'width': '90px', 'maxWidth': '90px', 'textAlign': 'center'},
+                ],
+                export_format='csv',
+                export_headers="display",
+            )
+            rec_table_cols = [
+                {
+                    "name": "Borough",
+                    "id": "borough",
+                    "type": "text",
+                },
+                {
+                    "name": "Match Score",
+                    "id": "match",
+                    "type": "numeric",
+                    "format": Format(precision=3),
+                },
+            ]
+
+            rec_style_cell_conditional = [
+                {"if": {"column_id": "borough"}, "textAlign": "left"}
+            ]
+
+            rec_table = dt.DataTable(
+                id="dt-results",
+                data=dt_data,
+                columns=rec_table_cols,
+                style_cell_conditional=rec_style_cell_conditional,
+                style_header={
+                    'backgroundColor': 'rgb(230, 230, 230)',
+                    'fontWeight': 'bold',
+                    'textAlign': 'left',
+                },
+                style_data_conditional=[
+                    {
+                        'if': {'row_index': 'odd'},
+                        'backgroundColor': 'rgb(248, 248, 248)'
+                    }
+                ],
+            )
+
+
+
+            return [rec_table, out_map, False, dt_rent, dt_venues, False]
+        else:
+            raise PreventUpdate
+
+@app.callback(
+    Output("btn-recommend", "disabled"),
+    [
+        Input('dpn-venue-types', 'value'),
+        Input('chk-acm-types', 'value'),
+    ],
+    [
+        State('dpn-venue-types', 'value'),
+        State('chk-acm-types', 'value'),
+    ],
+    prevent_initial_call=True,
+)
+def update_recommend_button(in_venue, in_acm, st_venue, st_acm):
+
+    if in_venue:
+        if st_acm is not None:
+            return False
+        else:
+            raise PreventUpdate
+    else:
+        if st_venue is not None:
+            return False
+        else:
+            raise PreventUpdate
 
 
 @app.callback(
-        Output('params-summary', 'children'),
-	[
-        Input('chk-acm-types', 'value'),
-        Input('slider-rent', 'value'),
-        Input('dpn-venue-types', 'value'),
+    Output("params-summary", "children"),
+    [
+        Input("chk-acm-types", "value"),
+        Input("slider-rent", "value"),
+        Input("dpn-venue-types", "value"),
     ],
     prevent_initial_call=True,
-    )
+)
 def update_summary_paragraph(acm_types, rent_range, venue_rank):
-            
-        acm_types_str = ', '.join(acm_types)
-        
-        if venue_rank:
-            venue_ranks_str = "\n\t".join([f'{i+1}. {v}' for i, v in enumerate(venue_rank)])
-        else:
-            venue_ranks_str = ""
-        
-        str_template = f"Accommodation types: {acm_types_str} \nRent range: {rent_range[0]}£ to {rent_range[1]}£ per month.\nPreference ranking: \n\t{venue_ranks_str}"
+    acm_types_str = ", ".join(acm_types)
 
-        return [str_template]
+    if venue_rank:
+        venue_ranks_str = "\n\t".join([f"{i+1}. {v}" for i, v in enumerate(venue_rank)])
+    else:
+        venue_ranks_str = ""
+
+    str_template = f"Accommodation types: {acm_types_str} \nRent range: {rent_range[0]}£ to {rent_range[1]}£ per month.\nPreference ranking: \n\t{venue_ranks_str}"
+
+    return [str_template]
 
